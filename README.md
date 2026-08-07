@@ -16,15 +16,17 @@
 - 啟動時會自動檢查 GitHub Releases，也可按「檢查更新」手動確認。
 - 發現新版時可直接在 App 內下載最新版 APK，顯示更新包名稱、大小、下載百分比與即時網路速度。
 - 下載後會驗證檔案大小、GitHub SHA-256 digest 與 Android 套件名稱，再啟動系統安裝介面。
+- 更新 APK 會儲存於手機共用的 `內部儲存空間/Download/` 資料夾。
+- App 下次啟動時會自動刪除版本小於或等於目前已安裝版本的舊更新 APK。
 - 「圖例展示」使用綠色圓角按鈕，與 App 主題一致。
 - 支援瀏海、動態島、狀態列與底部導覽列安全區域。
 - 具備自訂 App icon 與 adaptive icon。
 
 ## 安裝
 
-從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.6.1.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
+從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.6.2.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
 
-套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.6.1（versionCode 9），簽章與先前版本相同，可直接覆蓋安裝舊版。
+套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.6.2（versionCode 10），簽章與先前版本相同，可直接覆蓋安裝舊版。
 
 ## 使用方式
 
@@ -36,7 +38,7 @@
 
 ## 建置
 
-專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.6.1.apk`。
+專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.6.2.apk`。
 
 ## 版本規則
 
@@ -50,4 +52,4 @@
 
 ## 注意事項
 
-查詢功能依賴 7-ELEVEN 網站與網路連線；更新檢查與 APK 下載使用此專案的公開 GitHub Releases。Android 8.0 以上首次使用 App 內更新時，需要由使用者明確允許「安裝未知應用程式」。若網站版面、驗證碼或查詢流程變更，可能需要更新 App。
+查詢功能依賴 7-ELEVEN 網站與網路連線；更新檢查與 APK 下載使用此專案的公開 GitHub Releases。Android 10 以上透過 MediaStore 寫入公開 Download；Android 6～9 首次下載更新時需授予舊版儲存權限。Android 8.0 以上首次使用 App 內更新時，還需要由使用者明確允許「安裝未知應用程式」。若網站版面、驗證碼或查詢流程變更，可能需要更新 App。

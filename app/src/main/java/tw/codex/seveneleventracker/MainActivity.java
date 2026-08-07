@@ -1,10 +1,16 @@
 package tw.codex.seveneleventracker;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ContentResolver;
+import android.content.ContentUris;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -16,6 +22,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.provider.MediaStore;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -53,6 +60,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -72,6 +80,9 @@ public class MainActivity extends Activity {
     private static final String RELEASES_URL = "https://github.com/kkbox2a/seven-eleven-tracker-android/releases";
     private static final String REPOSITORY_URL = "https://github.com/kkbox2a/seven-eleven-tracker-android";
     private static final String APK_MIME_TYPE = "application/vnd.android.package-archive";
+    private static final int WRITE_STORAGE_REQUEST = 4201;
+    private static final Pattern UPDATE_APK_PATTERN = Pattern.compile(
+            "^SevenElevenTracker-v([0-9]+(?:\\.[0-9]+){1,2})\\.apk$", Pattern.CASE_INSENSITIVE);
     private static final Pattern TRACKING_PATTERN = Pattern.compile("^[A-Za-z0-9]{8,11}$");
     private static final Pattern FOUR_DIGITS = Pattern.compile("^\\d{4}$");
     private static final int GREEN = Color.rgb(0, 143, 76);
@@ -92,7 +103,8 @@ public class MainActivity extends Activity {
     private final List<TrackingResult> results = new ArrayList<>();
     private TextRecognizer recognizer;
     private volatile boolean downloadCancelled = false;
-    private File pendingInstallFile;
+    private Uri pendingInstallUri;
+    private UpdatePackage pendingLegacyDownload;
     private int currentIndex = 0;
     private int ocrAttempt = 0;
     private int generation = 0;
@@ -109,17 +121,18 @@ public class MainActivity extends Activity {
         buildUi();
         configureSystemInsets();
         configureWebView();
+        new Thread(this::cleanupOldUpdatePackages).start();
         handler.postDelayed(() -> checkForUpdates(false), 1500);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (pendingInstallFile != null && pendingInstallFile.exists()
+        if (pendingInstallUri != null
                 && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
                 || getPackageManager().canRequestPackageInstalls())) {
-            File apkFile = pendingInstallFile;
-            launchPackageInstaller(apkFile);
+            Uri apkUri = pendingInstallUri;
+            launchPackageInstaller(apkUri);
         }
     }
 
@@ -440,6 +453,138 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != WRITE_STORAGE_REQUEST) return;
+        UpdatePackage pending = pendingLegacyDownload;
+        pendingLegacyDownload = null;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && pending != null) {
+            downloadAndInstallApk(pending.name, pending.url, pending.size, pending.digest);
+        } else {
+            new AlertDialog.Builder(this)
+                    .setTitle("需要儲存權限")
+                    .setMessage("Android 9 以下需要儲存權限，才能將更新 APK 放入內部儲存空間的 Download 資料夾。")
+                    .setPositiveButton("關閉", null)
+                    .show();
+        }
+    }
+
+    private Uri publishToPublicDownloads(File source, String displayName, String sourceUrl) throws Exception {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentResolver resolver = getContentResolver();
+            Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            deletePublicDownloadByName(displayName);
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, displayName);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, APK_MIME_TYPE);
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/");
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            values.put(MediaStore.Downloads.DOWNLOAD_URI, sourceUrl);
+            Uri itemUri = resolver.insert(collection, values);
+            if (itemUri == null) throw new IllegalStateException("無法在 Download 資料夾建立更新包");
+            try (OutputStream output = resolver.openOutputStream(itemUri, "w")) {
+                if (output == null) throw new IllegalStateException("無法寫入 Download 更新包");
+                copyFile(source, output);
+            } catch (Exception error) {
+                resolver.delete(itemUri, null, null);
+                throw error;
+            }
+            ContentValues ready = new ContentValues();
+            ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            resolver.update(itemUri, ready, null, null);
+            return itemUri;
+        }
+
+        @SuppressWarnings("deprecation")
+        File downloadDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (!downloadDirectory.exists() && !downloadDirectory.mkdirs()) {
+            throw new IllegalStateException("無法建立 Download 資料夾");
+        }
+        File destination = new File(downloadDirectory, displayName);
+        try (FileOutputStream output = new FileOutputStream(destination, false)) {
+            copyFile(source, output);
+        }
+        return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", destination);
+    }
+
+    private void copyFile(File source, OutputStream output) throws Exception {
+        try (FileInputStream input = new FileInputStream(source)) {
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            output.flush();
+        }
+    }
+
+    private void deletePublicDownloadByName(String displayName) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        try {
+            Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            getContentResolver().delete(collection,
+                    MediaStore.MediaColumns.DISPLAY_NAME + "=? AND "
+                            + MediaStore.MediaColumns.RELATIVE_PATH + "=?",
+                    new String[]{displayName, Environment.DIRECTORY_DOWNLOADS + "/"});
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void cleanupOldUpdatePackages() {
+        cleanupTemporaryUpdates();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) cleanupMediaStoreUpdates();
+        else if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+            cleanupLegacyDownloads();
+        }
+    }
+
+    private void cleanupTemporaryUpdates() {
+        File directory = new File(getCacheDir(), "updates");
+        File[] files = directory.listFiles();
+        if (files == null) return;
+        long staleBefore = System.currentTimeMillis() - 60L * 60L * 1000L;
+        for (File file : files) {
+            if (file.isFile() && file.lastModified() < staleBefore) file.delete();
+        }
+    }
+
+    private void cleanupMediaStoreUpdates() {
+        Uri collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+        String[] projection = {MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME};
+        String selection = MediaStore.MediaColumns.DISPLAY_NAME + " LIKE ?";
+        try (Cursor cursor = getContentResolver().query(collection, projection, selection,
+                new String[]{"SevenElevenTracker-v%.apk"}, null)) {
+            if (cursor == null) return;
+            int idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID);
+            int nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME);
+            while (cursor.moveToNext()) {
+                String name = cursor.getString(nameColumn);
+                if (!shouldDeleteUpdate(name)) continue;
+                Uri itemUri = ContentUris.withAppendedId(collection, cursor.getLong(idColumn));
+                try {
+                    getContentResolver().delete(itemUri, null, null);
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void cleanupLegacyDownloads() {
+        File directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        File[] files = directory.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isFile() && shouldDeleteUpdate(file.getName())) file.delete();
+        }
+    }
+
+    private boolean shouldDeleteUpdate(String fileName) {
+        if (fileName == null) return false;
+        Matcher matcher = UPDATE_APK_PATTERN.matcher(fileName);
+        return matcher.matches() && compareVersions(matcher.group(1), BuildConfig.VERSION_NAME) <= 0;
+    }
+
     private JSONObject findApkAsset(JSONArray assets) throws JSONException {
         if (assets != null) {
             for (int i = 0; i < assets.length(); i++) {
@@ -466,6 +611,12 @@ public class MainActivity extends Activity {
     }
 
     private void downloadAndInstallApk(String apkName, String apkUrl, long expectedSize, String expectedDigest) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            pendingLegacyDownload = new UpdatePackage(apkName, apkUrl, expectedSize, expectedDigest);
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, WRITE_STORAGE_REQUEST);
+            return;
+        }
         String safeName = apkName.replaceAll("[^A-Za-z0-9._-]", "_");
         if (!safeName.toLowerCase(Locale.ROOT).endsWith(".apk")) safeName += ".apk";
 
@@ -502,13 +653,11 @@ public class MainActivity extends Activity {
             HttpURLConnection connection = null;
             File apkFile = null;
             try {
-                File base = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-                if (base == null) base = getCacheDir();
-                File updateDirectory = new File(base, "updates");
+                File updateDirectory = new File(getCacheDir(), "updates");
                 if (!updateDirectory.exists() && !updateDirectory.mkdirs()) {
                     throw new IllegalStateException("無法建立更新下載目錄");
                 }
-                apkFile = new File(updateDirectory, downloadName);
+                apkFile = new File(updateDirectory, downloadName + ".part.apk");
 
                 connection = (HttpURLConnection) new URL(apkUrl).openConnection();
                 connection.setInstanceFollowRedirects(true);
@@ -560,11 +709,12 @@ public class MainActivity extends Activity {
                     throw new IllegalStateException("更新包大小不符，請重新下載");
                 }
                 verifyDownloadedApk(apkFile, expectedDigest);
-                File completedFile = apkFile;
+                Uri completedUri = publishToPublicDownloads(apkFile, downloadName, apkUrl);
+                apkFile.delete();
                 runOnUiThread(() -> {
                     downloadDialog.dismiss();
-                    Toast.makeText(this, "下載完成，準備安裝", Toast.LENGTH_SHORT).show();
-                    requestApkInstallation(completedFile);
+                    Toast.makeText(this, "已儲存至 Download，準備安裝", Toast.LENGTH_SHORT).show();
+                    requestApkInstallation(completedUri);
                 });
             } catch (DownloadCancelledException ignored) {
                 if (apkFile != null && apkFile.exists()) apkFile.delete();
@@ -618,8 +768,8 @@ public class MainActivity extends Activity {
         return value.toString();
     }
 
-    private void requestApkInstallation(File apkFile) {
-        pendingInstallFile = apkFile;
+    private void requestApkInstallation(Uri apkUri) {
+        pendingInstallUri = apkUri;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && !getPackageManager().canRequestPackageInstalls()) {
             new AlertDialog.Builder(this)
@@ -634,18 +784,16 @@ public class MainActivity extends Activity {
                             openReleasePage(RELEASES_URL);
                         }
                     })
-                    .setNegativeButton("取消", (dialog, which) -> pendingInstallFile = null)
+                    .setNegativeButton("取消", (dialog, which) -> pendingInstallUri = null)
                     .show();
             return;
         }
-        launchPackageInstaller(apkFile);
+        launchPackageInstaller(apkUri);
     }
 
-    private void launchPackageInstaller(File apkFile) {
-        pendingInstallFile = null;
+    private void launchPackageInstaller(Uri contentUri) {
+        pendingInstallUri = null;
         try {
-            Uri contentUri = FileProvider.getUriForFile(this,
-                    getPackageName() + ".fileprovider", apkFile);
             Intent installIntent = new Intent(Intent.ACTION_VIEW);
             installIntent.setDataAndType(contentUri, APK_MIME_TYPE);
             installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -673,6 +821,20 @@ public class MainActivity extends Activity {
     }
 
     private static class DownloadCancelledException extends Exception {
+    }
+
+    private static class UpdatePackage {
+        final String name;
+        final String url;
+        final long size;
+        final String digest;
+
+        UpdatePackage(String name, String url, long size, String digest) {
+            this.name = name;
+            this.url = url;
+            this.size = size;
+            this.digest = digest;
+        }
     }
 
     private void openReleasePage(String url) {
@@ -1146,7 +1308,8 @@ public class MainActivity extends Activity {
     private void clearSessionData() {
         cancelTimeout();
         downloadCancelled = true;
-        pendingInstallFile = null;
+        pendingInstallUri = null;
+        pendingLegacyDownload = null;
         handler.removeCallbacksAndMessages(null);
         generation++;
         running = false;

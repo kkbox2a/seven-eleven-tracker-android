@@ -6,4 +6,7 @@
     <cache-path
         name="cached_updates"
         path="updates/" />
+    <external-path
+        name="public_downloads"
+        path="Download/" />
 </paths>

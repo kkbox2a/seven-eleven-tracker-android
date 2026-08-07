@@ -47,7 +47,6 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -59,16 +58,12 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 public class MainActivity extends Activity {
     private static final String QUERY_URL = "https://eservice.7-11.com.tw/e-tracking/search.aspx";
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/kkbox2a/seven-eleven-tracker-android/releases/latest";
     private static final String RELEASES_URL = "https://github.com/kkbox2a/seven-eleven-tracker-android/releases";
     private static final String REPOSITORY_URL = "https://github.com/kkbox2a/seven-eleven-tracker-android";
-    private static final int EXPORT_TXT_REQUEST = 4101;
-    private static final int EXPORT_XLSX_REQUEST = 4102;
     private static final Pattern TRACKING_PATTERN = Pattern.compile("^[A-Za-z0-9]{8,11}$");
     private static final Pattern FOUR_DIGITS = Pattern.compile("^\\d{4}$");
     private static final int GREEN = Color.rgb(0, 143, 76);
@@ -90,7 +85,6 @@ public class MainActivity extends Activity {
     private final List<TrackingResult> results = new ArrayList<>();
     private TextRecognizer recognizer;
     private GmsBarcodeScanner barcodeScanner;
-    private List<String> pendingExportNumbers = new ArrayList<>();
     private int currentIndex = 0;
     private int ocrAttempt = 0;
     private int generation = 0;
@@ -257,36 +251,6 @@ public class MainActivity extends Activity {
         rowParams.setMargins(0, dp(6), 0, dp(8));
         page.addView(buttonRow, rowParams);
 
-        LinearLayout exportRow = new LinearLayout(this);
-        exportRow.setOrientation(LinearLayout.HORIZONTAL);
-        exportRow.setGravity(Gravity.CENTER);
-
-        Button exportTxtButton = new Button(this);
-        exportTxtButton.setText("匯出單號 TXT");
-        exportTxtButton.setTextColor(GREEN);
-        exportTxtButton.setTextSize(13);
-        exportTxtButton.setAllCaps(false);
-        exportTxtButton.setBackgroundResource(R.drawable.update_button_background);
-        exportTxtButton.setStateListAnimator(null);
-        exportTxtButton.setOnClickListener(v -> beginExport(false));
-        exportRow.addView(exportTxtButton, new LinearLayout.LayoutParams(0, dp(44), 1f));
-
-        Button exportExcelButton = new Button(this);
-        exportExcelButton.setText("匯出單號 Excel");
-        exportExcelButton.setTextColor(GREEN);
-        exportExcelButton.setTextSize(13);
-        exportExcelButton.setAllCaps(false);
-        exportExcelButton.setBackgroundResource(R.drawable.update_button_background);
-        exportExcelButton.setStateListAnimator(null);
-        exportExcelButton.setOnClickListener(v -> beginExport(true));
-        LinearLayout.LayoutParams excelParams = new LinearLayout.LayoutParams(0, dp(44), 1f);
-        excelParams.setMargins(dp(8), 0, 0, 0);
-        exportRow.addView(exportExcelButton, excelParams);
-        LinearLayout.LayoutParams exportRowParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        exportRowParams.setMargins(0, 0, 0, dp(8));
-        page.addView(exportRow, exportRowParams);
-
         progressText = label("準備就緒", 15, Color.DKGRAY);
         progressText.setPadding(dp(8), dp(8), dp(8), dp(8));
         progressText.setBackgroundColor(Color.rgb(235, 239, 237));
@@ -451,109 +415,13 @@ public class MainActivity extends Activity {
         return values;
     }
 
-    private void beginExport(boolean excel) {
-        List<String> numbers = queue.isEmpty() ? parseTrackingInput() : new ArrayList<>(queue);
-        if (numbers.isEmpty()) {
-            Toast.makeText(this, "目前沒有可匯出的物流單號", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        pendingExportNumbers = new ArrayList<>(numbers);
-        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType(excel
-                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                : "text/plain");
-        intent.putExtra(Intent.EXTRA_TITLE, excel
-                ? "seven_eleven_tracking_numbers.xlsx"
-                : "seven_eleven_tracking_numbers.txt");
-        startActivityForResult(intent, excel ? EXPORT_XLSX_REQUEST : EXPORT_TXT_REQUEST);
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != EXPORT_TXT_REQUEST && requestCode != EXPORT_XLSX_REQUEST) return;
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
-            pendingExportNumbers.clear();
-            return;
-        }
-
-        try (OutputStream output = getContentResolver().openOutputStream(data.getData(), "w")) {
-            if (output == null) throw new IllegalStateException("無法開啟輸出檔案");
-            if (requestCode == EXPORT_XLSX_REQUEST) writeXlsx(output, pendingExportNumbers);
-            else output.write(String.join("\n", pendingExportNumbers).getBytes(StandardCharsets.UTF_8));
-            Toast.makeText(this, "已匯出 " + pendingExportNumbers.size() + " 筆物流單號", Toast.LENGTH_LONG).show();
-        } catch (Exception error) {
-            new AlertDialog.Builder(this)
-                    .setTitle("匯出失敗")
-                    .setMessage(error.getMessage())
-                    .setPositiveButton("關閉", null)
-                    .show();
-        } finally {
-            pendingExportNumbers.clear();
-        }
-    }
-
-    private void writeXlsx(OutputStream output, List<String> numbers) throws Exception {
-        try (ZipOutputStream zip = new ZipOutputStream(output)) {
-            writeZipEntry(zip, "[Content_Types].xml",
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                            + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
-                            + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
-                            + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
-                            + "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>"
-                            + "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
-                            + "</Types>");
-            writeZipEntry(zip, "_rels/.rels",
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                            + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                            + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>"
-                            + "</Relationships>");
-            writeZipEntry(zip, "xl/workbook.xml",
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                            + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
-                            + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
-                            + "<sheets><sheet name=\"物流單號\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
-            writeZipEntry(zip, "xl/_rels/workbook.xml.rels",
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                            + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-                            + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>"
-                            + "</Relationships>");
-
-            StringBuilder rows = new StringBuilder();
-            rows.append("<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>物流單號</t></is></c></row>");
-            for (int i = 0; i < numbers.size(); i++) {
-                int row = i + 2;
-                rows.append("<row r=\"").append(row).append("\"><c r=\"A").append(row)
-                        .append("\" t=\"inlineStr\"><is><t>").append(xmlEscape(numbers.get(i)))
-                        .append("</t></is></c></row>");
-            }
-            writeZipEntry(zip, "xl/worksheets/sheet1.xml",
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                            + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
-                            + "<cols><col min=\"1\" max=\"1\" width=\"24\" customWidth=\"1\"/></cols>"
-                            + "<sheetData>" + rows + "</sheetData></worksheet>");
-        }
-    }
-
-    private void writeZipEntry(ZipOutputStream zip, String name, String content) throws Exception {
-        zip.putNextEntry(new ZipEntry(name));
-        zip.write(content.getBytes(StandardCharsets.UTF_8));
-        zip.closeEntry();
-    }
-
-    private String xmlEscape(String value) {
-        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                .replace("\"", "&quot;").replace("'", "&apos;");
-    }
-
     private void showAboutDialog() {
         TextView information = new TextView(this);
         information.setTextSize(15);
         information.setTextColor(Color.DKGRAY);
         information.setPadding(dp(22), dp(8), dp(22), dp(4));
         information.setText("版本：v" + BuildConfig.VERSION_NAME
-                + "\n\n提供多筆物流單號查詢、QR／條碼掃描、OCR 驗證碼、查詢結果分享與單號匯出。"
+                + "\n\n提供多筆物流單號查詢、QR／條碼掃描、OCR 驗證碼與查詢結果分享。"
                 + "\n\n資料與隱私：查詢結果不會儲存為 App 紀錄檔；掃描畫面由 Google Play 服務處理。"
                 + "\n\n資料來源：7-ELEVEN 貨態查詢網站。本 App 為非官方工具，與統一超商無隸屬或合作關係。"
                 + "\n\n開發與原始碼：GitHub / kkbox2a"
@@ -1096,7 +964,6 @@ public class MainActivity extends Activity {
         running = false;
         queue.clear();
         results.clear();
-        pendingExportNumbers.clear();
         currentCaptcha = null;
         if (trackingInput != null) trackingInput.setText("");
         if (resultsContainer != null) resultsContainer.removeAllViews();

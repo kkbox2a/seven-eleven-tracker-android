@@ -92,8 +92,8 @@ public class MainActivity extends Activity {
     private enum Stage { IDLE, LOADING_FORM, RECOGNIZING, SUBMITTING, EXTRACTING }
 
     private EditText trackingInput;
-    private Button startButton;
-    private Button shareButton;
+    private LinearLayout startButton;
+    private LinearLayout shareButton;
     private TextView progressText;
     private LinearLayout resultsContainer;
     private WebView webView;
@@ -148,6 +148,32 @@ public class MainActivity extends Activity {
         view.setTextColor(color);
         view.setPadding(0, dp(4), 0, dp(4));
         return view;
+    }
+
+    private LinearLayout centeredIconButton(String text, int iconResource, int backgroundResource,
+                                            int textColor, int textSizeSp, int iconSizeDp) {
+        LinearLayout button = new LinearLayout(this);
+        button.setOrientation(LinearLayout.HORIZONTAL);
+        button.setGravity(Gravity.CENTER);
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setContentDescription(text);
+        button.setBackgroundResource(backgroundResource);
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconResource);
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        button.addView(icon, new LinearLayout.LayoutParams(dp(iconSizeDp), dp(iconSizeDp)));
+
+        TextView caption = label(text, textSizeSp, textColor);
+        caption.setTypeface(null, android.graphics.Typeface.BOLD);
+        caption.setGravity(Gravity.CENTER);
+        caption.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams captionParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        captionParams.setMargins(dp(7), 0, 0, 0);
+        button.addView(caption, captionParams);
+        return button;
     }
 
     private void buildUi() {
@@ -211,19 +237,10 @@ public class MainActivity extends Activity {
         TextView inputLabel = label("物流單號（每行一筆）", 16, Color.BLACK);
         inputHeader.addView(inputLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        Button exampleButton = new Button(this);
-        exampleButton.setText("圖例展示");
-        exampleButton.setTextColor(Color.WHITE);
-        exampleButton.setTextSize(14);
-        exampleButton.setTypeface(null, android.graphics.Typeface.BOLD);
-        exampleButton.setAllCaps(false);
-        exampleButton.setMinWidth(0);
-        exampleButton.setMinHeight(0);
+        LinearLayout exampleButton = centeredIconButton(
+                "圖例展示", R.drawable.ic_example, R.drawable.example_button_background,
+                Color.WHITE, 14, 19);
         exampleButton.setPadding(dp(16), 0, dp(16), 0);
-        exampleButton.setBackgroundResource(R.drawable.example_button_background);
-        exampleButton.setStateListAnimator(null);
-        exampleButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_example, 0, 0, 0);
-        exampleButton.setCompoundDrawablePadding(dp(6));
         exampleButton.setOnClickListener(v -> showTrackingExample());
         LinearLayout.LayoutParams exampleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38));
         exampleParams.setMargins(dp(8), dp(2), 0, dp(4));
@@ -238,36 +255,23 @@ public class MainActivity extends Activity {
         trackingInput.setMinLines(4);
         trackingInput.setMaxLines(8);
         trackingInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
-        trackingInput.setBackgroundColor(Color.WHITE);
+        trackingInput.setBackgroundResource(R.drawable.tracking_input_background);
+        trackingInput.setElevation(dp(3));
         trackingInput.setPadding(dp(12), dp(10), dp(12), dp(10));
         page.addView(trackingInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout buttonRow = new LinearLayout(this);
         buttonRow.setOrientation(LinearLayout.HORIZONTAL);
         buttonRow.setGravity(Gravity.CENTER);
-        startButton = new Button(this);
-        startButton.setText("開始逐筆查詢");
-        startButton.setTextColor(Color.WHITE);
-        startButton.setTextSize(15);
-        startButton.setTypeface(null, android.graphics.Typeface.BOLD);
-        startButton.setAllCaps(false);
-        startButton.setStateListAnimator(null);
-        startButton.setBackgroundResource(R.drawable.primary_button_background);
-        startButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0);
-        startButton.setCompoundDrawablePadding(dp(7));
+        startButton = centeredIconButton(
+                "開始逐筆查詢", R.drawable.ic_search, R.drawable.primary_button_background,
+                Color.WHITE, 15, 20);
         startButton.setOnClickListener(v -> startQuery());
         buttonRow.addView(startButton, new LinearLayout.LayoutParams(0, dp(52), 1f));
 
-        shareButton = new Button(this);
-        shareButton.setText("分享結果");
-        shareButton.setTextColor(Color.WHITE);
-        shareButton.setTextSize(15);
-        shareButton.setTypeface(null, android.graphics.Typeface.BOLD);
-        shareButton.setAllCaps(false);
-        shareButton.setStateListAnimator(null);
-        shareButton.setBackgroundResource(R.drawable.share_button_background);
-        shareButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_share, 0, 0, 0);
-        shareButton.setCompoundDrawablePadding(dp(7));
+        shareButton = centeredIconButton(
+                "分享結果", R.drawable.ic_share, R.drawable.share_button_background,
+                Color.WHITE, 15, 20);
         shareButton.setEnabled(false);
         shareButton.setOnClickListener(v -> shareResults());
         LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(0, dp(52), 1f);
@@ -632,7 +636,8 @@ public class MainActivity extends Activity {
                                   String apkName, String apkUrl, long apkSize, String apkDigest) {
         String message = "目前版本：v" + BuildConfig.VERSION_NAME + "\n最新版本：v" + latestVersion;
         message += "\n更新包：" + apkName + "\n大小：" + formatBytes(apkSize);
-        if (!releaseNotes.isEmpty()) message += "\n\n更新內容：\n" + releaseNotes;
+        String formattedNotes = formatReleaseNotesForDialog(releaseNotes);
+        if (!formattedNotes.isEmpty()) message += "\n\n更新內容\n" + formattedNotes;
         new AlertDialog.Builder(this)
                 .setTitle("發現新版")
                 .setMessage(message)
@@ -641,6 +646,36 @@ public class MainActivity extends Activity {
                 .setNeutralButton("Release 頁面", (dialog, which) -> openReleasePage(releaseUrl))
                 .setNegativeButton("稍後", null)
                 .show();
+    }
+
+    private String formatReleaseNotesForDialog(String markdown) {
+        if (markdown == null || markdown.trim().isEmpty()) return "";
+        StringBuilder output = new StringBuilder();
+        String[] lines = markdown.replace("\r\n", "\n").replace('\r', '\n').split("\n");
+        boolean previousBlank = true;
+        for (String sourceLine : lines) {
+            String line = sourceLine.trim();
+            if (line.isEmpty()) {
+                if (!previousBlank && output.length() > 0) output.append('\n');
+                previousBlank = true;
+                continue;
+            }
+
+            boolean heading = line.matches("^#{1,6}\\s+.*");
+            if (heading) line = line.replaceFirst("^#{1,6}\\s+", "");
+            if (line.equals("更新內容") || line.equalsIgnoreCase("what's changed")) continue;
+            line = line.replaceFirst("^[-*+]\\s+", "• ");
+            line = line.replaceFirst("^>\\s*", "");
+            line = line.replaceAll("\\[([^\\]]+)]\\([^)]*\\)", "$1");
+            line = line.replace("**", "").replace("__", "").replace("`", "");
+            line = line.replaceAll("<[^>]+>", "").trim();
+            if (line.isEmpty()) continue;
+
+            if (heading && output.length() > 0 && !previousBlank) output.append('\n');
+            output.append(line).append('\n');
+            previousBlank = false;
+        }
+        return output.toString().trim();
     }
 
     private void downloadAndInstallApk(String apkName, String apkUrl, long expectedSize, String expectedDigest) {

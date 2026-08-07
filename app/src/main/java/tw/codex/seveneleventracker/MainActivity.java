@@ -531,9 +531,21 @@ public class MainActivity extends Activity {
 
     private void cleanupOldUpdatePackages() {
         cleanupTemporaryUpdates();
+        cleanupLegacyAppSpecificUpdates();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) cleanupMediaStoreUpdates();
         else if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
             cleanupLegacyDownloads();
+        }
+    }
+
+    private void cleanupLegacyAppSpecificUpdates() {
+        File base = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (base == null) return;
+        File directory = new File(base, "updates");
+        File[] files = directory.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isFile() && shouldDeleteUpdate(file.getName())) file.delete();
         }
     }
 

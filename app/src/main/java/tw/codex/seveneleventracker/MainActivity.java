@@ -28,6 +28,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -177,6 +178,8 @@ public class MainActivity extends Activity {
         aboutButton.setPadding(dp(14), 0, dp(14), 0);
         aboutButton.setBackgroundResource(R.drawable.update_button_background);
         aboutButton.setStateListAnimator(null);
+        aboutButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_info, 0, 0, 0);
+        aboutButton.setCompoundDrawablePadding(dp(6));
         aboutButton.setOnClickListener(v -> showAboutDialog());
         updateRow.addView(aboutButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)));
 
@@ -190,6 +193,8 @@ public class MainActivity extends Activity {
         updateButton.setPadding(dp(14), 0, dp(14), 0);
         updateButton.setBackgroundResource(R.drawable.update_button_background);
         updateButton.setStateListAnimator(null);
+        updateButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_update, 0, 0, 0);
+        updateButton.setCompoundDrawablePadding(dp(6));
         updateButton.setOnClickListener(v -> checkForUpdates(true));
         LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36));
         updateParams.setMargins(dp(8), 0, 0, 0);
@@ -217,6 +222,8 @@ public class MainActivity extends Activity {
         exampleButton.setPadding(dp(16), 0, dp(16), 0);
         exampleButton.setBackgroundResource(R.drawable.example_button_background);
         exampleButton.setStateListAnimator(null);
+        exampleButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_example, 0, 0, 0);
+        exampleButton.setCompoundDrawablePadding(dp(6));
         exampleButton.setOnClickListener(v -> showTrackingExample());
         LinearLayout.LayoutParams exampleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38));
         exampleParams.setMargins(dp(8), dp(2), 0, dp(4));
@@ -241,12 +248,26 @@ public class MainActivity extends Activity {
         startButton = new Button(this);
         startButton.setText("開始逐筆查詢");
         startButton.setTextColor(Color.WHITE);
-        startButton.setBackgroundColor(GREEN);
+        startButton.setTextSize(15);
+        startButton.setTypeface(null, android.graphics.Typeface.BOLD);
+        startButton.setAllCaps(false);
+        startButton.setStateListAnimator(null);
+        startButton.setBackgroundResource(R.drawable.primary_button_background);
+        startButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0);
+        startButton.setCompoundDrawablePadding(dp(7));
         startButton.setOnClickListener(v -> startQuery());
         buttonRow.addView(startButton, new LinearLayout.LayoutParams(0, dp(52), 1f));
 
         shareButton = new Button(this);
         shareButton.setText("分享結果");
+        shareButton.setTextColor(Color.WHITE);
+        shareButton.setTextSize(15);
+        shareButton.setTypeface(null, android.graphics.Typeface.BOLD);
+        shareButton.setAllCaps(false);
+        shareButton.setStateListAnimator(null);
+        shareButton.setBackgroundResource(R.drawable.share_button_background);
+        shareButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_share, 0, 0, 0);
+        shareButton.setCompoundDrawablePadding(dp(7));
         shareButton.setEnabled(false);
         shareButton.setOnClickListener(v -> shareResults());
         LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(0, dp(52), 1f);
@@ -887,6 +908,7 @@ public class MainActivity extends Activity {
 
     private void startQuery() {
         if (running) return;
+        hideKeyboard();
         String[] lines = trackingInput.getText().toString().split("\\r?\\n");
         Set<String> seen = new HashSet<>();
         queue.clear();
@@ -912,6 +934,17 @@ public class MainActivity extends Activity {
         running = true;
         startButton.setEnabled(false);
         beginCurrentTracking();
+    }
+
+    private void hideKeyboard() {
+        View focusedView = getCurrentFocus();
+        if (focusedView == null) return;
+        InputMethodManager inputMethodManager =
+                (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (inputMethodManager != null) {
+            inputMethodManager.hideSoftInputFromWindow(focusedView.getWindowToken(), 0);
+        }
+        focusedView.clearFocus();
     }
 
     private String currentTracking() {

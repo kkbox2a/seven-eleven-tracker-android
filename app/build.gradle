@@ -1,0 +1,43 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "tw.codex.seveneleventracker"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "tw.codex.seveneleventracker"
+        minSdk 23
+        targetSdk 35
+        versionCode 5
+        versionName "1.4.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach {
+            outputFileName = "SevenElevenTracker-v${variant.versionName}.apk"
+        }
+    }
+}
+
+dependencies {
+    implementation "com.google.mlkit:text-recognition:16.0.1"
+}

@@ -27,8 +27,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -82,7 +82,6 @@ public class MainActivity extends Activity {
     private EditText trackingInput;
     private Button startButton;
     private Button shareButton;
-    private CheckBox showWebView;
     private TextView progressText;
     private LinearLayout resultsContainer;
     private WebView webView;
@@ -223,12 +222,6 @@ public class MainActivity extends Activity {
         trackingInput.setPadding(dp(12), dp(10), dp(12), dp(10));
         page.addView(trackingInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        showWebView = new CheckBox(this);
-        showWebView.setText("顯示網站查詢畫面");
-        showWebView.setPadding(0, dp(8), 0, dp(4));
-        showWebView.setOnCheckedChangeListener((buttonView, isChecked) -> updateWebViewVisibility());
-        page.addView(showWebView);
-
         LinearLayout buttonRow = new LinearLayout(this);
         buttonRow.setOrientation(LinearLayout.HORIZONTAL);
         buttonRow.setGravity(Gravity.CENTER);
@@ -256,7 +249,8 @@ public class MainActivity extends Activity {
         page.addView(progressText, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         webView = new WebView(this);
-        page.addView(webView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        webView.setVisibility(View.GONE);
+        page.addView(webView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
 
         TextView resultTitle = label("查詢結果", 18, Color.BLACK);
         resultTitle.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -328,12 +322,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void updateWebViewVisibility() {
-        ViewGroup.LayoutParams params = webView.getLayoutParams();
-        params.height = showWebView.isChecked() ? dp(430) : 1;
-        webView.setLayoutParams(params);
-    }
-
     private void showTrackingExample() {
         ImageView exampleImage = new ImageView(this);
         exampleImage.setImageResource(R.drawable.tracking_number_example);
@@ -362,21 +350,42 @@ public class MainActivity extends Activity {
     }
 
     private void showAboutDialog() {
+        LinearLayout aboutContent = new LinearLayout(this);
+        aboutContent.setOrientation(LinearLayout.VERTICAL);
+        aboutContent.setPadding(dp(22), dp(8), dp(22), dp(4));
+
         TextView information = new TextView(this);
         information.setTextSize(15);
         information.setTextColor(Color.DKGRAY);
-        information.setPadding(dp(22), dp(8), dp(22), dp(4));
         information.setText("版本：v" + BuildConfig.VERSION_NAME
                 + "\n\n提供多筆物流單號查詢、OCR 驗證碼、查詢結果分享與 App 內更新下載。"
                 + "\n\n資料與隱私：查詢結果不會儲存為 App 紀錄檔。更新 APK 只會暫存於 App 專屬下載目錄。"
                 + "\n\n資料來源：7-ELEVEN 貨態查詢網站。本 App 為非官方工具，與統一超商無隸屬或合作關係。"
                 + "\n\n開發與原始碼：GitHub / kkbox2a"
                 + "\n\nCopyright © 2026 kkbox2a. All rights reserved.");
+        aboutContent.addView(information, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout githubRow = new LinearLayout(this);
+        githubRow.setGravity(Gravity.CENTER_VERTICAL);
+        githubRow.setPadding(0, dp(14), 0, dp(6));
+        TextView githubLabel = label("查看 GitHub 專案", 15, Color.DKGRAY);
+        githubRow.addView(githubLabel, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ImageButton githubButton = new ImageButton(this);
+        githubButton.setImageResource(R.drawable.ic_github);
+        githubButton.setContentDescription("開啟 GitHub 專案");
+        githubButton.setPadding(dp(9), dp(9), dp(9), dp(9));
+        githubButton.setBackgroundResource(R.drawable.update_button_background);
+        githubButton.setOnClickListener(v -> openReleasePage(REPOSITORY_URL));
+        githubRow.addView(githubButton, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        aboutContent.addView(githubRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         new AlertDialog.Builder(this)
                 .setTitle("關於 7-ELEVEN 貨態查詢")
-                .setView(information)
-                .setPositiveButton("GitHub", (dialog, which) -> openReleasePage(REPOSITORY_URL))
-                .setNegativeButton("關閉", null)
+                .setView(aboutContent)
+                .setPositiveButton("關閉", null)
                 .show();
     }
 

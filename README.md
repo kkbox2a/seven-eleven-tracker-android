@@ -8,10 +8,10 @@
 - 內建「圖例展示」按鈕，可離線查看寄件與取件單號的位置及輸入方式。
 - 多筆物流單號逐筆查詢。
 - 使用 ML Kit OCR 辨識四碼驗證碼，失敗時會自動重試。
-- 可顯示網站查詢畫面，方便確認或手動處理。
+- 網站查詢固定在背景執行，使用者只會看到查詢進度文字與最終結果。
 - 單純顯示查詢結果，不會在手機儲存 CSV 或文字紀錄。
 - 可透過 Android 分享功能直接分享查詢結果文字。
-- 內建「關於 App」頁面，提供版本、隱私、免責聲明、GitHub 與 Copyright 資訊。
+- 內建「關於 App」頁面，提供版本、隱私、免責聲明、GitHub 圖示按鈕與 Copyright 資訊。
 - 使用系統返回鍵離開時會清除輸入單號、查詢結果及暫存工作階段。
 - 啟動時會自動檢查 GitHub Releases，也可按「檢查更新」手動確認。
 - 發現新版時可直接在 App 內下載最新版 APK，顯示更新包名稱、大小、下載百分比與即時網路速度。
@@ -22,9 +22,9 @@
 
 ## 安裝
 
-從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.6.0.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
+從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.6.1.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
 
-套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.6.0（versionCode 8），簽章與先前版本相同，可直接覆蓋安裝舊版。
+套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.6.1（versionCode 9），簽章與先前版本相同，可直接覆蓋安裝舊版。
 
 ## 使用方式
 
@@ -36,7 +36,7 @@
 
 ## 建置
 
-專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.6.0.apk`。
+專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.6.1.apk`。
 
 ## 版本規則
 

@@ -10,8 +10,8 @@ android {
         applicationId "tw.codex.seveneleventracker"
         minSdk 23
         targetSdk 35
-        versionCode 7
-        versionName "1.5.1"
+        versionCode 8
+        versionName "1.6.0"
     }
 
     buildTypes {
@@ -40,5 +40,4 @@ android {
 
 dependencies {
     implementation "com.google.mlkit:text-recognition:16.0.1"
-    implementation "com.google.android.gms:play-services-code-scanner:16.1.0"
 }

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -11,8 +12,10 @@ import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -28,15 +31,12 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.mlkit.vision.common.InputImage;
-import com.google.mlkit.vision.barcode.common.Barcode;
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
@@ -45,11 +45,18 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import androidx.core.content.FileProvider;
+
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -64,6 +71,7 @@ public class MainActivity extends Activity {
     private static final String LATEST_RELEASE_API = "https://api.github.com/repos/kkbox2a/seven-eleven-tracker-android/releases/latest";
     private static final String RELEASES_URL = "https://github.com/kkbox2a/seven-eleven-tracker-android/releases";
     private static final String REPOSITORY_URL = "https://github.com/kkbox2a/seven-eleven-tracker-android";
+    private static final String APK_MIME_TYPE = "application/vnd.android.package-archive";
     private static final Pattern TRACKING_PATTERN = Pattern.compile("^[A-Za-z0-9]{8,11}$");
     private static final Pattern FOUR_DIGITS = Pattern.compile("^\\d{4}$");
     private static final int GREEN = Color.rgb(0, 143, 76);
@@ -84,7 +92,8 @@ public class MainActivity extends Activity {
     private final List<String> queue = new ArrayList<>();
     private final List<TrackingResult> results = new ArrayList<>();
     private TextRecognizer recognizer;
-    private GmsBarcodeScanner barcodeScanner;
+    private volatile boolean downloadCancelled = false;
+    private File pendingInstallFile;
     private int currentIndex = 0;
     private int ocrAttempt = 0;
     private int generation = 0;
@@ -98,15 +107,21 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-        GmsBarcodeScannerOptions scannerOptions = new GmsBarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
-                .enableAutoZoom()
-                .build();
-        barcodeScanner = GmsBarcodeScanning.getClient(this, scannerOptions);
         buildUi();
         configureSystemInsets();
         configureWebView();
         handler.postDelayed(() -> checkForUpdates(false), 1500);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pendingInstallFile != null && pendingInstallFile.exists()
+                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                || getPackageManager().canRequestPackageInstalls())) {
+            File apkFile = pendingInstallFile;
+            launchPackageInstaller(apkFile);
+        }
     }
 
     private int dp(int value) {
@@ -178,22 +193,6 @@ public class MainActivity extends Activity {
 
         TextView inputLabel = label("物流單號（每行一筆）", 16, Color.BLACK);
         inputHeader.addView(inputLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-        Button scanButton = new Button(this);
-        scanButton.setText("掃描 QR／條碼");
-        scanButton.setTextColor(Color.WHITE);
-        scanButton.setTextSize(13);
-        scanButton.setTypeface(null, android.graphics.Typeface.BOLD);
-        scanButton.setAllCaps(false);
-        scanButton.setMinWidth(0);
-        scanButton.setMinHeight(0);
-        scanButton.setPadding(dp(13), 0, dp(13), 0);
-        scanButton.setBackgroundResource(R.drawable.scan_button_background);
-        scanButton.setStateListAnimator(null);
-        scanButton.setOnClickListener(v -> startCodeScan());
-        LinearLayout.LayoutParams scanParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38));
-        scanParams.setMargins(dp(8), dp(2), 0, dp(4));
-        inputHeader.addView(scanButton, scanParams);
 
         Button exampleButton = new Button(this);
         exampleButton.setText("圖例展示");
@@ -362,67 +361,14 @@ public class MainActivity extends Activity {
         dialog.show();
     }
 
-    private void startCodeScan() {
-        barcodeScanner.startScan()
-                .addOnSuccessListener(barcode -> handleScannedValue(barcode.getRawValue()))
-                .addOnCanceledListener(() -> Toast.makeText(this, "已取消掃描", Toast.LENGTH_SHORT).show())
-                .addOnFailureListener(error -> new AlertDialog.Builder(this)
-                        .setTitle("無法啟動掃描")
-                        .setMessage("請確認 Google Play 服務可正常使用後再試一次。\n\n" + error.getMessage())
-                        .setPositiveButton("關閉", null)
-                        .show());
-    }
-
-    private void handleScannedValue(String rawValue) {
-        String candidate = findTrackingNumber(rawValue);
-        if (candidate.isEmpty()) {
-            new AlertDialog.Builder(this)
-                    .setTitle("未找到有效物流單號")
-                    .setMessage("掃描內容：\n" + (rawValue == null ? "" : rawValue)
-                            + "\n\n物流單號需為 8～11 碼英文字母或數字。")
-                    .setPositiveButton("重新掃描", (dialog, which) -> startCodeScan())
-                    .setNegativeButton("關閉", null)
-                    .show();
-            return;
-        }
-
-        List<String> currentValues = parseTrackingInput();
-        if (currentValues.contains(candidate)) {
-            Toast.makeText(this, "單號已存在：" + candidate, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String existing = trackingInput.getText().toString().trim();
-        trackingInput.setText(existing.isEmpty() ? candidate : existing + "\n" + candidate);
-        trackingInput.setSelection(trackingInput.length());
-        Toast.makeText(this, "已加入單號：" + candidate, Toast.LENGTH_SHORT).show();
-    }
-
-    private String findTrackingNumber(String rawValue) {
-        if (rawValue == null) return "";
-        String exact = rawValue.trim().toUpperCase(Locale.ROOT);
-        if (TRACKING_PATTERN.matcher(exact).matches()) return exact;
-        Matcher matcher = Pattern.compile("(?i)(?<![A-Z0-9])[A-Z0-9]{8,11}(?![A-Z0-9])").matcher(rawValue);
-        return matcher.find() ? matcher.group().toUpperCase(Locale.ROOT) : "";
-    }
-
-    private List<String> parseTrackingInput() {
-        List<String> values = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (String line : trackingInput.getText().toString().split("\\r?\\n")) {
-            String value = line.trim().toUpperCase(Locale.ROOT);
-            if (TRACKING_PATTERN.matcher(value).matches() && seen.add(value)) values.add(value);
-        }
-        return values;
-    }
-
     private void showAboutDialog() {
         TextView information = new TextView(this);
         information.setTextSize(15);
         information.setTextColor(Color.DKGRAY);
         information.setPadding(dp(22), dp(8), dp(22), dp(4));
         information.setText("版本：v" + BuildConfig.VERSION_NAME
-                + "\n\n提供多筆物流單號查詢、QR／條碼掃描、OCR 驗證碼與查詢結果分享。"
-                + "\n\n資料與隱私：查詢結果不會儲存為 App 紀錄檔；掃描畫面由 Google Play 服務處理。"
+                + "\n\n提供多筆物流單號查詢、OCR 驗證碼、查詢結果分享與 App 內更新下載。"
+                + "\n\n資料與隱私：查詢結果不會儲存為 App 紀錄檔。更新 APK 只會暫存於 App 專屬下載目錄。"
                 + "\n\n資料來源：7-ELEVEN 貨態查詢網站。本 App 為非官方工具，與統一超商無隸屬或合作關係。"
                 + "\n\n開發與原始碼：GitHub / kkbox2a"
                 + "\n\nCopyright © 2026 kkbox2a. All rights reserved.");
@@ -459,9 +405,16 @@ public class MainActivity extends Activity {
                 String latestVersion = normalizeVersion(release.optString("tag_name"));
                 String releaseUrl = release.optString("html_url", RELEASES_URL);
                 String releaseNotes = release.optString("body", "").trim();
+                JSONObject apkAsset = findApkAsset(release.optJSONArray("assets"));
+                String apkName = apkAsset.optString("name", "SevenElevenTracker-v" + latestVersion + ".apk");
+                String apkUrl = apkAsset.optString("browser_download_url");
+                long apkSize = apkAsset.optLong("size", 0L);
+                String apkDigest = apkAsset.optString("digest", "");
+                if (apkUrl.isEmpty()) throw new IllegalStateException("Release 中找不到 APK 更新包");
                 boolean hasUpdate = compareVersions(latestVersion, BuildConfig.VERSION_NAME) > 0;
                 runOnUiThread(() -> {
-                    if (hasUpdate) showUpdateDialog(latestVersion, releaseUrl, releaseNotes);
+                    if (hasUpdate) showUpdateDialog(latestVersion, releaseUrl, releaseNotes,
+                            apkName, apkUrl, apkSize, apkDigest);
                     else if (userInitiated) Toast.makeText(this,
                             "目前已是最新版 v" + BuildConfig.VERSION_NAME, Toast.LENGTH_LONG).show();
                 });
@@ -478,15 +431,239 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void showUpdateDialog(String latestVersion, String releaseUrl, String releaseNotes) {
+    private JSONObject findApkAsset(JSONArray assets) throws JSONException {
+        if (assets != null) {
+            for (int i = 0; i < assets.length(); i++) {
+                JSONObject asset = assets.getJSONObject(i);
+                if (asset.optString("name").toLowerCase(Locale.ROOT).endsWith(".apk")) return asset;
+            }
+        }
+        throw new JSONException("Release 中沒有 APK 更新包");
+    }
+
+    private void showUpdateDialog(String latestVersion, String releaseUrl, String releaseNotes,
+                                  String apkName, String apkUrl, long apkSize, String apkDigest) {
         String message = "目前版本：v" + BuildConfig.VERSION_NAME + "\n最新版本：v" + latestVersion;
+        message += "\n更新包：" + apkName + "\n大小：" + formatBytes(apkSize);
         if (!releaseNotes.isEmpty()) message += "\n\n更新內容：\n" + releaseNotes;
         new AlertDialog.Builder(this)
                 .setTitle("發現新版")
                 .setMessage(message)
-                .setPositiveButton("前往下載", (dialog, which) -> openReleasePage(releaseUrl))
+                .setPositiveButton("下載並安裝", (dialog, which) ->
+                        downloadAndInstallApk(apkName, apkUrl, apkSize, apkDigest))
+                .setNeutralButton("Release 頁面", (dialog, which) -> openReleasePage(releaseUrl))
                 .setNegativeButton("稍後", null)
                 .show();
+    }
+
+    private void downloadAndInstallApk(String apkName, String apkUrl, long expectedSize, String expectedDigest) {
+        String safeName = apkName.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (!safeName.toLowerCase(Locale.ROOT).endsWith(".apk")) safeName += ".apk";
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(22), dp(8), dp(22), dp(4));
+        TextView nameView = label("更新包：" + apkName, 15, Color.DKGRAY);
+        TextView sizeView = label("大小：" + formatBytes(expectedSize), 14, Color.DKGRAY);
+        ProgressBar progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setProgress(0);
+        TextView progressView = label("準備下載…", 14, Color.DKGRAY);
+        TextView speedView = label("網路速度：--", 14, GREEN);
+        content.addView(nameView);
+        content.addView(sizeView);
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(12));
+        barParams.setMargins(0, dp(12), 0, dp(8));
+        content.addView(progressBar, barParams);
+        content.addView(progressView);
+        content.addView(speedView);
+
+        downloadCancelled = false;
+        AlertDialog downloadDialog = new AlertDialog.Builder(this)
+                .setTitle("下載最新版 APK")
+                .setView(content)
+                .setNegativeButton("取消", (dialog, which) -> downloadCancelled = true)
+                .setCancelable(false)
+                .create();
+        downloadDialog.show();
+
+        final String downloadName = safeName;
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            File apkFile = null;
+            try {
+                File base = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                if (base == null) base = getCacheDir();
+                File updateDirectory = new File(base, "updates");
+                if (!updateDirectory.exists() && !updateDirectory.mkdirs()) {
+                    throw new IllegalStateException("無法建立更新下載目錄");
+                }
+                apkFile = new File(updateDirectory, downloadName);
+
+                connection = (HttpURLConnection) new URL(apkUrl).openConnection();
+                connection.setInstanceFollowRedirects(true);
+                connection.setConnectTimeout(15_000);
+                connection.setReadTimeout(30_000);
+                connection.setRequestProperty("Accept", APK_MIME_TYPE);
+                connection.setRequestProperty("User-Agent", "SevenElevenTracker-Android");
+                int responseCode = connection.getResponseCode();
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    throw new IllegalStateException("下載伺服器回應代碼 " + responseCode);
+                }
+
+                long totalSize = expectedSize > 0 ? expectedSize : connection.getContentLengthLong();
+                long downloaded = 0L;
+                long lastBytes = 0L;
+                long lastTime = android.os.SystemClock.elapsedRealtime();
+                try (InputStream input = connection.getInputStream();
+                     FileOutputStream output = new FileOutputStream(apkFile, false)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        if (downloadCancelled) throw new DownloadCancelledException();
+                        output.write(buffer, 0, count);
+                        downloaded += count;
+                        long now = android.os.SystemClock.elapsedRealtime();
+                        if (now - lastTime >= 500L) {
+                            double seconds = (now - lastTime) / 1000.0;
+                            double bytesPerSecond = (downloaded - lastBytes) / seconds;
+                            long currentBytes = downloaded;
+                            int percent = totalSize > 0 ? (int) Math.min(100, currentBytes * 100 / totalSize) : 0;
+                            String progressText = totalSize > 0
+                                    ? percent + "%　" + formatBytes(currentBytes) + " / " + formatBytes(totalSize)
+                                    : formatBytes(currentBytes);
+                            runOnUiThread(() -> {
+                                if (!downloadCancelled) {
+                                    progressBar.setProgress(percent);
+                                    progressView.setText(progressText);
+                                    speedView.setText("網路速度：" + formatBytes((long) bytesPerSecond) + "/s");
+                                }
+                            });
+                            lastTime = now;
+                            lastBytes = downloaded;
+                        }
+                    }
+                    output.flush();
+                }
+
+                if (expectedSize > 0 && apkFile.length() != expectedSize) {
+                    throw new IllegalStateException("更新包大小不符，請重新下載");
+                }
+                verifyDownloadedApk(apkFile, expectedDigest);
+                File completedFile = apkFile;
+                runOnUiThread(() -> {
+                    downloadDialog.dismiss();
+                    Toast.makeText(this, "下載完成，準備安裝", Toast.LENGTH_SHORT).show();
+                    requestApkInstallation(completedFile);
+                });
+            } catch (DownloadCancelledException ignored) {
+                if (apkFile != null && apkFile.exists()) apkFile.delete();
+                runOnUiThread(() -> Toast.makeText(this, "已取消更新下載", Toast.LENGTH_SHORT).show());
+            } catch (Exception error) {
+                if (apkFile != null && apkFile.exists()) apkFile.delete();
+                runOnUiThread(() -> {
+                    downloadDialog.dismiss();
+                    new AlertDialog.Builder(this)
+                            .setTitle("更新下載失敗")
+                            .setMessage(error.getMessage())
+                            .setPositiveButton("前往 Release 頁面", (dialog, which) -> openReleasePage(RELEASES_URL))
+                            .setNegativeButton("關閉", null)
+                            .show();
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
+    }
+
+    private void verifyDownloadedApk(File apkFile, String expectedDigest) throws Exception {
+        if (expectedDigest != null && expectedDigest.toLowerCase(Locale.ROOT).startsWith("sha256:")) {
+            String expected = expectedDigest.substring("sha256:".length()).trim();
+            String actual = sha256(apkFile);
+            if (!expected.equalsIgnoreCase(actual)) throw new IllegalStateException("更新包 SHA-256 驗證失敗");
+        }
+        PackageInfo packageInfo = getPackageManager().getPackageArchiveInfo(apkFile.getAbsolutePath(), 0);
+        if (packageInfo == null || !getPackageName().equals(packageInfo.packageName)) {
+            throw new IllegalStateException("更新包的 App 套件名稱不符");
+        }
+        PackageInfo installedInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+        long archiveVersion = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? packageInfo.getLongVersionCode() : packageInfo.versionCode;
+        long installedVersion = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? installedInfo.getLongVersionCode() : installedInfo.versionCode;
+        if (archiveVersion <= installedVersion) {
+            throw new IllegalStateException("更新包版本不高於目前安裝版本");
+        }
+    }
+
+    private String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (FileInputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+        }
+        StringBuilder value = new StringBuilder();
+        for (byte item : digest.digest()) value.append(String.format(Locale.ROOT, "%02x", item & 0xff));
+        return value.toString();
+    }
+
+    private void requestApkInstallation(File apkFile) {
+        pendingInstallFile = apkFile;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                && !getPackageManager().canRequestPackageInstalls()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("允許安裝更新")
+                    .setMessage("Android 需要你允許此 App 安裝下載的更新。開啟設定後，請啟用「允許來自此來源」。")
+                    .setPositiveButton("前往設定", (dialog, which) -> {
+                        try {
+                            Intent settingsIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    Uri.parse("package:" + getPackageName()));
+                            startActivity(settingsIntent);
+                        } catch (Exception error) {
+                            openReleasePage(RELEASES_URL);
+                        }
+                    })
+                    .setNegativeButton("取消", (dialog, which) -> pendingInstallFile = null)
+                    .show();
+            return;
+        }
+        launchPackageInstaller(apkFile);
+    }
+
+    private void launchPackageInstaller(File apkFile) {
+        pendingInstallFile = null;
+        try {
+            Uri contentUri = FileProvider.getUriForFile(this,
+                    getPackageName() + ".fileprovider", apkFile);
+            Intent installIntent = new Intent(Intent.ACTION_VIEW);
+            installIntent.setDataAndType(contentUri, APK_MIME_TYPE);
+            installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(installIntent);
+        } catch (Exception error) {
+            new AlertDialog.Builder(this)
+                    .setTitle("無法啟動安裝")
+                    .setMessage(error.getMessage())
+                    .setPositiveButton("前往 Release 頁面", (dialog, which) -> openReleasePage(RELEASES_URL))
+                    .setNegativeButton("關閉", null)
+                    .show();
+        }
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes < 1024L) return bytes + " B";
+        double value = bytes;
+        String[] units = {"KB", "MB", "GB"};
+        int unit = -1;
+        do {
+            value /= 1024.0;
+            unit++;
+        } while (value >= 1024.0 && unit < units.length - 1);
+        return String.format(Locale.ROOT, "%.1f %s", value, units[unit]);
+    }
+
+    private static class DownloadCancelledException extends Exception {
     }
 
     private void openReleasePage(String url) {
@@ -959,6 +1136,8 @@ public class MainActivity extends Activity {
 
     private void clearSessionData() {
         cancelTimeout();
+        downloadCancelled = true;
+        pendingInstallFile = null;
         handler.removeCallbacksAndMessages(null);
         generation++;
         running = false;
@@ -985,6 +1164,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         cancelTimeout();
+        downloadCancelled = true;
         if (recognizer != null) recognizer.close();
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidTracker");

@@ -12,7 +12,6 @@
 - 可顯示網站查詢畫面，方便確認或手動處理。
 - 單純顯示查詢結果，不會在手機儲存 CSV 或文字紀錄。
 - 可透過 Android 分享功能直接分享查詢結果文字。
-- 可將本次查詢的物流單號匯出為純文字 `.txt` 或真正的 Excel `.xlsx`。
 - 內建「關於 App」頁面，提供版本、隱私、免責聲明、GitHub 與 Copyright 資訊。
 - 使用系統返回鍵離開時會清除輸入單號、查詢結果及暫存工作階段。
 - 啟動時會自動檢查 GitHub Releases，也可按「檢查更新」手動確認。
@@ -23,21 +22,21 @@
 
 ## 安裝
 
-從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.5.0.apk`，傳到 Android 手機後開啟安裝。若手機阻擋側載，請依系統提示允許該瀏覽器或檔案管理器安裝未知應用程式。
+從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.5.1.apk`，傳到 Android 手機後開啟安裝。若手機阻擋側載，請依系統提示允許該瀏覽器或檔案管理器安裝未知應用程式。
 
-套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.5.0（versionCode 6），簽章與先前版本相同，可直接覆蓋安裝舊版。
+套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.5.1（versionCode 7），簽章與先前版本相同，可直接覆蓋安裝舊版。
 
 ## 使用方式
 
 1. 在輸入框中每行輸入一筆物流單號。
 2. 也可點擊「掃描 QR／條碼」讀取物流單號；不確定單號位置時可查看圖例。
 3. 點擊「開始逐筆查詢」。
-4. 查詢完成後可查看、分享，或匯出本次物流單號；App 不會自動儲存紀錄檔。
+4. 查詢完成後可查看或分享結果；App 不會自動儲存紀錄檔。
 5. 點擊「關於 App」可查看專案資訊與開啟 GitHub；點擊「檢查更新」可確認最新版。
 
 ## 建置
 
-專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.5.0.apk`。
+專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.5.1.apk`。
 
 ## 版本規則
 

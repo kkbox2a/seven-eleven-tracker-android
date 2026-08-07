@@ -278,8 +278,17 @@ public class MainActivity extends Activity {
         shareParams.setMargins(dp(8), 0, 0, 0);
         buttonRow.addView(shareButton, shareParams);
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowParams.setMargins(0, dp(6), 0, dp(8));
+        rowParams.setMargins(0, dp(6), 0, dp(6));
         page.addView(buttonRow, rowParams);
+
+        LinearLayout clearButton = centeredIconButton(
+                "清除並重新查詢", R.drawable.ic_clear, R.drawable.update_button_background,
+                GREEN, 14, 19);
+        clearButton.setOnClickListener(v -> clearQuerySession(true));
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(44));
+        clearParams.setMargins(0, 0, 0, dp(8));
+        page.addView(clearButton, clearParams);
 
         progressText = label("準備就緒", 15, Color.DKGRAY);
         progressText.setPadding(dp(8), dp(8), dp(8), dp(8));
@@ -1241,7 +1250,10 @@ public class MainActivity extends Activity {
     private void advanceQueue() {
         currentIndex++;
         if (currentIndex < queue.size()) {
-            handler.postDelayed(this::beginCurrentTracking, 600);
+            final int token = generation;
+            handler.postDelayed(() -> {
+                if (running && token == generation) beginCurrentTracking();
+            }, 600);
         } else {
             finishRun();
         }
@@ -1386,23 +1398,37 @@ public class MainActivity extends Activity {
     }
 
     private void clearSessionData() {
-        cancelTimeout();
+        clearQuerySession(false);
         downloadCancelled = true;
         pendingInstallUri = null;
         pendingLegacyDownload = null;
         handler.removeCallbacksAndMessages(null);
+    }
+
+    private void clearQuerySession(boolean announce) {
+        cancelTimeout();
         generation++;
         running = false;
+        stage = Stage.IDLE;
         queue.clear();
         results.clear();
+        currentIndex = 0;
+        ocrAttempt = 0;
+        manualAttempt = false;
         currentCaptcha = null;
         if (trackingInput != null) trackingInput.setText("");
         if (resultsContainer != null) resultsContainer.removeAllViews();
+        if (startButton != null) startButton.setEnabled(true);
+        if (shareButton != null) shareButton.setEnabled(false);
+        if (progressText != null) progressText.setText("準備就緒");
         if (webView != null) {
             webView.stopLoading();
             webView.clearHistory();
             webView.loadUrl("about:blank");
         }
+        hideKeyboard();
+        if (rootScrollView != null) rootScrollView.post(() -> rootScrollView.smoothScrollTo(0, 0));
+        if (announce) Toast.makeText(this, "已清除，可以輸入新的物流單號", Toast.LENGTH_SHORT).show();
     }
 
     @SuppressWarnings("deprecation")

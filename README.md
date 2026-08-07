@@ -11,6 +11,7 @@
 - 網站查詢固定在背景執行，使用者只會看到查詢進度文字與最終結果。
 - 單純顯示查詢結果，不會在手機儲存 CSV 或文字紀錄。
 - 可透過 Android 分享功能直接分享查詢結果文字。
+- 提供「清除並重新查詢」按鈕，可停止目前查詢並清空單號、進度與結果，立即開始下一批查詢。
 - 按下「開始逐筆查詢」會自動收起鍵盤，主要操作按鈕採圓角設計，圖示與文字會整組置中。
 - 單號輸入框使用圓角綠色框線、聚焦強調與柔和陰影，方便辨識輸入區域。
 - 內建「關於 App」頁面，提供版本、隱私、免責聲明、GitHub 圖示按鈕與 Copyright 資訊。
@@ -27,9 +28,9 @@
 
 ## 安裝
 
-從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.6.6.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
+從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.7.0.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
 
-套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.6.6（versionCode 14），簽章與先前版本相同，可直接覆蓋安裝舊版。
+套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.7.0（versionCode 15），簽章與先前版本相同，可直接覆蓋安裝舊版。
 
 ## 使用方式
 
@@ -41,7 +42,7 @@
 
 ## 建置
 
-專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.6.6.apk`。
+專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.7.0.apk`。
 
 ## 版本規則
 

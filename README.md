@@ -24,9 +24,9 @@
 
 ## 安裝
 
-從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.6.2.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
+從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.6.3.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
 
-套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.6.2（versionCode 10），簽章與先前版本相同，可直接覆蓋安裝舊版。
+套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.6.3（versionCode 11），簽章與先前版本相同，可直接覆蓋安裝舊版。
 
 ## 使用方式
 
@@ -38,7 +38,7 @@
 
 ## 建置
 
-專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.6.2.apk`。
+專案使用 Android Gradle Plugin 8.7.3、Gradle 8.9、Java 17 與 Android SDK 35。執行 `gradlew.bat assembleRelease` 後，APK 位於 `app/build/outputs/apk/release/`，檔名會自動包含版本號，例如 `SevenElevenTracker-v1.6.3.apk`。
 
 ## 版本規則
 

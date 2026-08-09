@@ -310,7 +310,9 @@ public class MainActivity extends Activity {
 
         rootScrollView = new ScrollView(this);
         rootScrollView.setFillViewport(true);
-        rootScrollView.setClipToPadding(false);
+        rootScrollView.setClipToPadding(true);
+        rootScrollView.setClipChildren(true);
+        rootScrollView.setBackgroundColor(Color.rgb(247, 249, 248));
         rootScrollView.addView(page);
         setContentView(rootScrollView);
     }

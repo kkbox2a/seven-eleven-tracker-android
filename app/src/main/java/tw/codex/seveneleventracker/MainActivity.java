@@ -7,6 +7,8 @@ import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -238,10 +240,20 @@ public class MainActivity extends Activity {
         TextView inputLabel = label("物流單號（每行一筆）", 16, Color.BLACK);
         inputHeader.addView(inputLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        LinearLayout pasteButton = centeredIconButton(
+                "貼上", R.drawable.ic_paste, R.drawable.update_button_background,
+                GREEN, 13, 18);
+        pasteButton.setPadding(dp(11), 0, dp(11), 0);
+        pasteButton.setOnClickListener(v -> pasteTrackingNumbers());
+        LinearLayout.LayoutParams pasteParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(38));
+        pasteParams.setMargins(dp(6), dp(2), 0, dp(4));
+        inputHeader.addView(pasteButton, pasteParams);
+
         LinearLayout exampleButton = centeredIconButton(
                 "圖例展示", R.drawable.ic_example, R.drawable.example_button_background,
-                Color.WHITE, 14, 19);
-        exampleButton.setPadding(dp(16), 0, dp(16), 0);
+                Color.WHITE, 13, 18);
+        exampleButton.setPadding(dp(11), 0, dp(11), 0);
         exampleButton.setOnClickListener(v -> showTrackingExample());
         LinearLayout.LayoutParams exampleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38));
         exampleParams.setMargins(dp(8), dp(2), 0, dp(4));
@@ -316,6 +328,42 @@ public class MainActivity extends Activity {
         rootScrollView.setBackgroundColor(Color.rgb(247, 249, 248));
         rootScrollView.addView(page);
         setContentView(rootScrollView);
+    }
+
+    private void pasteTrackingNumbers() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard == null || !clipboard.hasPrimaryClip()) {
+            Toast.makeText(this, "剪貼簿沒有可貼上的文字", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ClipData clip = clipboard.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) {
+            Toast.makeText(this, "剪貼簿沒有可貼上的文字", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        CharSequence clipboardText = clip.getItemAt(0).coerceToText(this);
+        if (clipboardText == null) {
+            Toast.makeText(this, "剪貼簿內容不是文字", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        List<String> pastedLines = new ArrayList<>();
+        for (String line : clipboardText.toString().replace('\r', '\n').split("\\n+")) {
+            String value = line.trim();
+            if (!value.isEmpty()) pastedLines.add(value);
+        }
+        if (pastedLines.isEmpty()) {
+            Toast.makeText(this, "剪貼簿沒有可貼上的單號", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String existing = trackingInput.getText().toString().trim();
+        String pasted = android.text.TextUtils.join("\n", pastedLines);
+        String combined = existing.isEmpty() ? pasted : existing + "\n" + pasted;
+        trackingInput.setText(combined);
+        trackingInput.setSelection(combined.length());
+        rootScrollView.post(() -> rootScrollView.smoothScrollTo(0, trackingInput.getTop()));
+        Toast.makeText(this, "已貼上 " + pastedLines.size() + " 筆內容", Toast.LENGTH_SHORT).show();
     }
 
     @SuppressWarnings("deprecation")

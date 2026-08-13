@@ -108,6 +108,7 @@ public class MainActivity extends Activity {
     private UpdatePackage pendingLegacyDownload;
     private int currentIndex = 0;
     private int ocrAttempt = 0;
+    private int submitAttempt = 0;
     private int generation = 0;
     private boolean running = false;
     private boolean manualAttempt = false;
@@ -999,6 +1000,7 @@ public class MainActivity extends Activity {
 
     private void beginCurrentTracking() {
         ocrAttempt = 0;
+        submitAttempt = 0;
         manualAttempt = false;
         progress("[" + (currentIndex + 1) + "/" + queue.size() + "] 準備查詢 " + currentTracking());
         loadFreshForm(false);
@@ -1018,6 +1020,8 @@ public class MainActivity extends Activity {
     private void inspectLoadedPage() {
         final int token = generation;
         String script = "(function(){"
+                + "var body=(document.body&&document.body.innerText)||'';"
+                + "if(/查無該取貨\\s*[\\/／]\\s*繳費編號資料/.test(body)){AndroidTracker.onPageKind('no_data'," + token + ");return;}"
                 + "var q=document.getElementById('query_no');"
                 + "if(q){AndroidTracker.onPageKind('result'," + token + ");return;}"
                 + "var input=document.getElementById('txtProductNum');"
@@ -1029,6 +1033,10 @@ public class MainActivity extends Activity {
 
     private void handlePageKind(String kind, int token) {
         if (!running || token != generation) return;
+        if ("no_data".equals(kind)) {
+            failCurrent("查無該取貨／繳費編號資料");
+            return;
+        }
         if ("result".equals(kind)) {
             stage = Stage.EXTRACTING;
             extractResult(token);
@@ -1170,6 +1178,11 @@ public class MainActivity extends Activity {
 
     private void submitCaptcha(String code, int token) {
         if (!running || token != generation) return;
+        submitAttempt++;
+        if (submitAttempt > 6) {
+            failCurrent("網站重複返回查詢頁面，已達安全停止上限");
+            return;
+        }
         stage = Stage.SUBMITTING;
         progress(currentTracking() + "：已輸入驗證碼，等待網站結果…");
         String script = "(function(){"
@@ -1416,6 +1429,7 @@ public class MainActivity extends Activity {
         results.clear();
         currentIndex = 0;
         ocrAttempt = 0;
+        submitAttempt = 0;
         manualAttempt = false;
         currentCaptcha = null;
         if (trackingInput != null) trackingInput.setText("");

@@ -86,7 +86,10 @@ public class MainActivity extends Activity {
     private static final int WRITE_STORAGE_REQUEST = 4201;
     private static final Pattern UPDATE_APK_PATTERN = Pattern.compile(
             "^SevenElevenTracker-v([0-9]+(?:\\.[0-9]+){1,2})\\.apk$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern TRACKING_PATTERN = Pattern.compile("^[A-Za-z0-9]{8,11}$");
+    private static final int MIN_TRACKING_LENGTH = 8;
+    private static final int MAX_TRACKING_LENGTH = 20;
+    private static final Pattern TRACKING_PATTERN = Pattern.compile(
+            "^[A-Za-z0-9]{" + MIN_TRACKING_LENGTH + "," + MAX_TRACKING_LENGTH + "}$");
     private static final Pattern FOUR_DIGITS = Pattern.compile("^\\d{4}$");
     private static final int GREEN = Color.rgb(0, 143, 76);
     private static final int ORANGE = Color.rgb(255, 103, 18);
@@ -261,7 +264,7 @@ public class MainActivity extends Activity {
         page.addView(inputHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         trackingInput = new EditText(this);
-        trackingInput.setHint("請輸入寄件8碼或取件11碼，每行一筆");
+        trackingInput.setHint("請輸入物流單號（每筆8～20碼），每行一筆");
         trackingInput.setHintTextColor(Color.GRAY);
         trackingInput.setTextSize(17);
         trackingInput.setGravity(Gravity.TOP | Gravity.START);
@@ -1011,7 +1014,15 @@ public class MainActivity extends Activity {
             String value = line.trim().toUpperCase(Locale.ROOT);
             if (value.isEmpty() || seen.contains(value)) continue;
             if (!TRACKING_PATTERN.matcher(value).matches()) {
-                Toast.makeText(this, "單號格式不符：" + value, Toast.LENGTH_LONG).show();
+                String reason;
+                if (value.length() < MIN_TRACKING_LENGTH) {
+                    reason = "單號不可少於 " + MIN_TRACKING_LENGTH + " 碼：" + value;
+                } else if (value.length() > MAX_TRACKING_LENGTH) {
+                    reason = "單號不可超過 " + MAX_TRACKING_LENGTH + " 碼：" + value;
+                } else {
+                    reason = "單號只能包含英文字母或數字：" + value;
+                }
+                Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
                 return;
             }
             seen.add(value);

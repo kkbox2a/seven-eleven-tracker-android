@@ -4,7 +4,7 @@
 
 ## 主要功能
 
-- 輸入框預設保持空白，提示「請輸入寄件8碼或取件11碼，每行一筆」。
+- 輸入框預設保持空白，每筆物流單號可輸入 8～20 碼英文字母或數字。
 - 提供剪貼簿「貼上」按鈕，可快速加入一筆或多筆物流單號，既有內容不會被覆蓋。
 - 內建「圖例展示」按鈕，可離線查看寄件與取件單號的位置及輸入方式。
 - 多筆物流單號逐筆查詢。
@@ -30,9 +30,9 @@
 
 ## 安裝
 
-從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載 `SevenElevenTracker-v1.8.0.apk`，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
+從 [GitHub Releases](https://github.com/kkbox2a/seven-eleven-tracker-android/releases) 下載最新版 APK，傳到 Android 手機後開啟安裝。若從 App 內更新，首次使用時需依 Android 提示允許此 App 安裝未知應用程式。
 
-套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.8.0（versionCode 18），簽章與先前版本相同，可直接覆蓋安裝舊版。
+套件名稱為 `tw.codex.seveneleventracker`。目前版本為 1.9.0（versionCode 19），簽章與先前版本相同，可直接覆蓋安裝舊版。
 
 ## 使用方式
 
